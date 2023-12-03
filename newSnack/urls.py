@@ -22,4 +22,5 @@ urlpatterns = [
     path('api/user/', include("user.urls")),
     path('api/user/', include("allauth.urls")),
     path('api/kuser/', include("kakaouser.urls")),
+    path('api/feed/', include("feed.urls")),
 ]
