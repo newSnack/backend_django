@@ -13,7 +13,7 @@ class PrivateFeed(models.Model):
     user = models.ForeignKey(User, null=True, blank=True, on_delete=CASCADE, help_text="소유자")
     
     def __str__(self):
-        return self.title
+        return self.user.username + "-" + self.title
     
 class PublicFeed(models.Model):
     title = models.CharField(max_length=30, help_text="피드제목")
@@ -24,4 +24,4 @@ class PublicFeed(models.Model):
     interest = models.ForeignKey(Interest, null=True, blank=True, on_delete=CASCADE, help_text="관심사")
     
     def __str__(self):
-        return self.title
+        return self.interest.name + "-" + self.title

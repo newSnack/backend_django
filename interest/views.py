@@ -9,3 +9,8 @@ class InterestViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
     queryset = Interest.objects.all()
     serializer_class = InterestSerializer
+
+class UserInterestViewSet(viewsets.ModelViewSet):
+    permission_classes = [IsAuthenticated]
+    queryset = UserInterest.objects.all()
+    serializer_class = UserInterestSerializer
