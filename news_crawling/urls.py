@@ -1,6 +1,6 @@
 from django.urls import path
-from .views import NewsListView
+from .views import PersonalNewsListView
 
 urlpatterns = [
-    path('news/', NewsListView.as_view(), name='news-list'),
+    path('personal-news/', PersonalNewsListView.as_view(), name='news-list'),
 ]

@@ -1,10 +1,13 @@
 from rest_framework import serializers
+from .models import News
 
-class NewsSerializer(serializers.Serializer):
-    cnt = serializers.IntegerField()
-    title = serializers.CharField()
-    description = serializers.CharField()
-    org_link = serializers.CharField()
-    link = serializers.CharField()
-    pDate = serializers.CharField()
-    content = serializers.CharField()
+
+class NewsSerializer(serializers.ModelSerializer):
+    pub_date = serializers.SerializerMethodField()
+
+    class Meta:
+        model = News
+        fields = ['title', 'description', 'org_link', 'link', 'pub_date', 'content']
+
+    def get_pub_date(self, obj):
+        return obj.pub_date.strftime('%Y-%m-%d %H:%M:%S') if obj.pub_date else None
