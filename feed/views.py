@@ -25,3 +25,12 @@ class PrivateFeedView(APIView):
         serializer_context = {'request': request,}
         serializer_class = PrivateFeedSerializer(PrivateFeeds, many=True, context=serializer_context)
         return Response(serializer_class.data)
+    
+class PublicFeedView(APIView):
+    permission_classes = [IsAuthenticated]
+    def get(self, request):
+        interest = request.GET.get('interest', None)
+        PublicFeeds = PublicFeed.objects.filter(interest=interest).filter(date = datetime.today().date())
+        serializer_context = {'request': request,}
+        serializer_class = PublicFeedSerializer(PublicFeeds, many=True, context=serializer_context)
+        return Response(serializer_class.data)
