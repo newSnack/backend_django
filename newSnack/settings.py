@@ -49,6 +49,7 @@ INSTALLED_APPS = [
     'kakaouser.apps.KakaouserConfig',
     'feed',
     'interest',
+    'news_crawling',
 
     # DRF
     'rest_framework',
