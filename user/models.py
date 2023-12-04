@@ -35,10 +35,16 @@ class User(AbstractBaseUser, PermissionsMixin):
     is_staff = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+    # 추가정보
+    nickname = models.CharField(max_length=10, null=True, blank=True, help_text="닉네임")
+    birthYear = models.IntegerField(default=0, help_text="출생연도")
+    kakaoIsLinked = models.BooleanField(default=False, help_text="카카오톡 수신여부")
+    emailIsLinked = models.BooleanField(default=False, help_text="이메일 수신여부")
+    kakaoAddress = models.CharField(max_length=20, null=True, blank=True, help_text="카카오톡 주소")
+    emailAddress = models.CharField(max_length=20, null=True, blank=True, help_text="이메일 주소")
+    frequency = models.IntegerField(default=0, help_text="수신횟수")
+    receptTime = models.CharField(max_length=30, null=True, blank=True, help_text="수신 시간대")
 
     objects = UserManager()
 
     USERNAME_FIELD = 'username'
-
-    def __str__(self):
-        return self.username
