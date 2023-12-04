@@ -24,4 +24,4 @@ class PublicFeed(models.Model):
     interest = models.ForeignKey(Interest, null=True, blank=True, on_delete=CASCADE, help_text="관심사")
     
     def __str__(self):
-        return self.interest.name + "-" + self.title
+        return self.interest.ko_name + "-" + self.title
