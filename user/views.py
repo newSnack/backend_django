@@ -8,6 +8,7 @@ from rest_framework.permissions import IsAuthenticated
 from .serializers import *
 from rest_framework.views import APIView
 from interest.models import *
+from rest_framework import status
 
 class UserViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
@@ -26,7 +27,7 @@ class UserInitializeView(APIView):
         emailAddress = request.data["emailAddress"]
         frequency = request.data["frequency"]
         receptTime = request.data["receptTime"]
-        
+
         user = User.objects.get(pk=self.request.user.pk)
         user.nickname = nickname
         user.birthYear = birthYear
@@ -38,13 +39,8 @@ class UserInitializeView(APIView):
         user.receptTime = receptTime
         user.save()
 
-        for i_pk in interest:
-            userInterest = UserInterest()
-            userInterest.user = user
-            userInterest.interest = Interest.objects.get(en_name=i_pk)
-            userInterest.save()
+        return Response({"detail": "User initialized successfully."}, status=status.HTTP_200_OK)
 
-        return Response({"detail":"user intialize done"})
 
 class IDCheckView(RetrieveAPIView):
     queryset = None
@@ -63,3 +59,25 @@ class IDCheckView(RetrieveAPIView):
 
         serializer = self.get_serializer(instance)
         return Response(serializer.data)
+
+
+class UserInterestView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        user = User.objects.get(pk=request.user.pk)
+        new_interest_keywords = request.data.get("new_interest_keywords", [])
+        new_interest_embeddings = request.data.get("new_interest_embeddings", [])
+
+        # 새로운 관심사 키워드 검증 및 추가(0자면 안되, 50자 초과시 첫 50자만 슬라이싱해 저장)
+        for keyword in new_interest_keywords:
+            if isinstance(keyword, str) and 0 < len(keyword):
+                user.interest_keywords.append(keyword[:50])
+
+        # 새로운 관심사 임베딩 벡터 검증 및 추가(2048차원인지 검증)
+        for embedding in new_interest_embeddings:
+            if isinstance(embedding, list) and len(embedding) == 2048:
+                user.interest_embeddings.append(embedding)
+
+        user.save()
+        return Response({"detail": "User interests updated successfully."}, status=status.HTTP_200_OK)
