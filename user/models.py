@@ -1,5 +1,7 @@
 from django.db import models
 from django.contrib.auth.models import AbstractBaseUser, BaseUserManager, PermissionsMixin
+from rest_framework.exceptions import ValidationError
+
 
 # Create your models here.
 class UserManager(BaseUserManager):
@@ -44,6 +46,12 @@ class User(AbstractBaseUser, PermissionsMixin):
     emailAddress = models.CharField(max_length=20, null=True, blank=True, help_text="이메일 주소")
     frequency = models.IntegerField(default=0, help_text="수신횟수")
     receptTime = models.CharField(max_length=30, null=True, blank=True, help_text="수신 시간대")
+
+    interest_keywords = models.JSONField(default=list, blank=True) # 관심사 클릭에 의해 추가되는 문자열 형식의 키워드들을 모아놓은 리스트
+                                                                   # 한단어가 아닌 구나 문장일 수 있으며, 네이버 뉴스 api 검색어 생성에 활용할 예정
+    interest_embeddings = models.JSONField(default=list, blank=True) # 관심사 클릭에 의해, 뉴스제목 원문에 기반해 생성한 임베딩 벡터들을 모아놓은 리스트
+                                                                     # 벡터는 2048차원의 실수 벡터이며, 크롤링해온 기사 목록들과 내용 유사도 측정에 활용할 예정
+
 
     objects = UserManager()
 
