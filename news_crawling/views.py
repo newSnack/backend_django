@@ -1,10 +1,13 @@
+import json
+import re
+from django.shortcuts import render
 from rest_framework import status
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from .serializers import NewsSerializer
 import requests
 import os
-from bs4 import BeautifulSoup
+from bs4 import BeautifulSoup, SoupStrainer
 
 
 # def extractNewsContent(url):
@@ -40,6 +43,92 @@ def getPersonalNaverSearch(node, srcText, start, display):
     else:
         print(f"Error: {response.status_code}")
         return None
+    
+def contents_flat(c_List): 
+    flatList = [] 
+    d_flatList=[]
+    for elem in c_List: 
+        if type(elem) == list: 
+            for e in elem: 
+                flatList.append(e) 
+        else: 
+            flatList.append(elem) 
+           
+    return flatList
+
+
+def get_comment(url):
+    page=1    
+    header = { 
+        "User-agent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/65.0.3325.181 Safari/537.36", 
+        "referer":url, 
+         
+    }
+    oid=url.split("/")[-2]
+    aid=url.split("/")[-1] 
+    c_List=[]
+    while True : 
+        c_url="https://apis.naver.com/commentBox/cbox/web_neo_list_jsonp.json?ticket=news&templateId=default_society&pool=cbox5&_callback=jQuery1707138182064460843_1523512042464&lang=ko&country=&objectId=news"+oid+"%2C"+aid+"&categoryId=&pageSize=100&indexSize=10&groupId=&listType=OBJECT&pageType=more&page="+str(page)+"&refresh=false&sort=FAVORITE"  
+        r=requests.get(c_url,headers=header) 
+        cont=BeautifulSoup(r.content,"html.parser")     
+        total_comm=str(cont).split('comment":')[1].split(",")[0] 
+        
+        match=re.findall('"contents":"([^\*]*)","userIdNo"', str(cont))
+        date=re.findall('"modTime":"([^\*]*)","modTimeGmt"', str(cont))             
+        c_List.append(match)
+        
+        if int(total_comm) <= ((page) * 5): 
+            break 
+        else :  
+            page+=1
+            
+    return contents_flat(c_List)   
+    
+def additional_article_info(url: str):
+    headers = {
+        'authority': 'n.news.naver.com',
+        'accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
+        'accept-language': 'ko-KR,ko;q=0.9',
+        'cache-control': 'no-cache',
+        'dnt': '1',
+        'pragma': 'no-cache',
+        'sec-ch-ua': '"Google Chrome";v="119", "Chromium";v="119", "Not?A_Brand";v="24"',
+        'sec-ch-ua-mobile': '?0',
+        'sec-ch-ua-platform': '"Windows"',
+        'sec-fetch-dest': 'document',
+        'sec-fetch-mode': 'navigate',
+        'sec-fetch-site': 'none',
+        'sec-fetch-user': '?1',
+        'upgrade-insecure-requests': '1',
+        'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36',
+    }
+
+    response = requests.get(url, headers=headers)
+    document = response.content.decode("utf-8")
+
+    # Provider
+    provider_strainer = SoupStrainer("a", attrs={"class": "media_end_head_top_logo _LAZY_LOADING_ERROR_HIDE"})
+    provider_DOM = BeautifulSoup(document, "lxml", parse_only=provider_strainer)
+    provider = provider_DOM.find("img")["alt"]
+
+    # img
+    try:
+        img_strainer = SoupStrainer("div", attrs={"class": "media_end_photo_photo"})
+        img_DOM = BeautifulSoup(document, "lxml", parse_only=img_strainer)
+        img = img_DOM.find("img")["src"]
+    except:
+        img = "NO_IMAGE"
+
+    comment = get_comment(url)
+    data = {
+            "comment": comment,
+            "img": img,
+            "provider": provider
+        }
+
+    # Converting the dictionary to a JSON string
+    json_data = json.dumps(data)
+    return json_data
 
 
 class PersonalNewsListView(APIView):
