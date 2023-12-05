@@ -4,14 +4,82 @@ from allauth.socialaccount.providers.kakao import views as kakao_view
 from allauth.socialaccount.models import SocialAccount
 from django.shortcuts import redirect
 from django.http import JsonResponse
+import json
 from json import JSONDecodeError
 from rest_framework import status
 import os
 import requests
 from user.models import User
+from django.conf import settings
 
 BASE_URL = 'http://localhost:8000/'
 KAKAO_CALLBACK_URI = 'http://localhost:8000/api/kuser/kakao/callback/'
+
+
+def refresh_access_token(refresh_token):
+    payload = {
+        'grant_type': 'refresh_token',
+        'client_id': settings.KAKAO_APP_KEY,
+        'refresh_token': refresh_token
+    }
+    headers = {
+        'Content-Type': 'application/x-www-form-urlencoded;charset=utf-8'
+    }
+    response = requests.post('https://kauth.kakao.com/oauth/token', headers=headers, data=payload)
+
+    if response.status_code == 200:
+        new_access_token = response.json().get('access_token')
+        # Optionally handle the new refresh token if provided
+        new_refresh_token = response.json().get('refresh_token')
+        if new_refresh_token:
+            # Update stored refresh token
+            pass
+        return new_access_token
+    else:
+        return None
+
+
+def send_to_me(request):
+    access_token = request.GET.get('access_token')
+    refresh_token = request.GET.get('refresh_token')
+
+    validation_response = requests.get('https://kapi.kakao.com/v1/user/access_token_info',
+                                       headers={'Authorization': f'Bearer {access_token}'})
+    if validation_response.status_code != 200:
+        new_access_token = refresh_access_token(refresh_token)
+        if new_access_token:
+            access_token = new_access_token
+        else:
+            return JsonResponse({'status': 'error', 'message': 'Refresh token expired'})
+
+    headers = {
+        'Authorization': f'Bearer {access_token}',
+        'Content-Type': 'application/x-www-form-urlencoded'
+    }
+
+    template_object = {
+        "object_type": "feed",
+        "content": {
+            "title": "News Update",
+            "description": "Here is your daily news summary",
+        }
+    }
+
+    payload = {
+        'template_object': json.dumps(template_object),
+    }
+
+    response = requests.post(
+        'https://kapi.kakao.com/v2/api/talk/memo/default/send',
+        headers=headers,
+        data=payload
+    )
+
+    if response.status_code == 200:
+        return JsonResponse({'status': 'success', 'message': 'Message sent successfully'})
+    else:
+        return JsonResponse({'status': 'error', 'message': 'Failed to send message'})
+
 
 # 인가코드는 프론트에서 받는 걸로 변경하기
 def kakao_login(request):
@@ -41,7 +109,7 @@ def kakao_callback(request, **kwargs):
     )
     profile_json = profile_request.json()
     kakao_account = profile_json.get("kakao_account")
-    username = kakao_account.get("nickname", None) 
+    username = kakao_account.get("nickname", None)
 
     # 해당 이메일 유저가 있나 확인
     try:
@@ -77,7 +145,7 @@ def kakao_callback(request, **kwargs):
         if accept_status != 200:
             return JsonResponse({'err_msg': 'failed to signup'}, status=accept_status)
         accept_json = accept.json()
-        
+
         return JsonResponse(accept_json)
 
     except SocialAccount.DoesNotExist:
