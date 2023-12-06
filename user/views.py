@@ -9,6 +9,9 @@ from .serializers import *
 from rest_framework.views import APIView
 from interest.models import *
 from rest_framework import status
+from feed.models import *
+from feed.serializers import *
+from django.http import Http404
 
 class UserViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
@@ -41,6 +44,24 @@ class UserInitializeView(APIView):
 
         return Response({"detail": "User initialized successfully."}, status=status.HTTP_200_OK)
 
+class UserLikedPrivateFeedsView(APIView):
+    permission_classes = [IsAuthenticated]
+    def get(self, request):
+        PrivateLikedFeeds = PrivateFeed.objects.filter(user=self.request.user).filter(likeOrDislike=1)
+        serializer_context = {'request': request,}
+        serializer_class = PrivateFeedSerializer(PrivateLikedFeeds, many=True, context=serializer_context)
+        return Response(serializer_class.data)
+    
+class UserLikedPublicFeedsView(APIView):
+    permission_classes = [IsAuthenticated]
+    def get(self, request):
+        likelist = User.objects.prefetch_related('like').get(pk=self.request.user.pk).like.all()
+        if likelist:
+            serializer_context = {'request': request,}
+            serializer_class = PublicFeedSerializer(likelist, many=True, context=serializer_context)
+            return Response(serializer_class.data)
+        else:
+            raise Http404("PublicFeed does not exist")
 
 class IDCheckView(RetrieveAPIView):
     queryset = None
