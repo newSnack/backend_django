@@ -2,7 +2,7 @@ from django.shortcuts import render
 from rest_framework import viewsets
 from .models import *
 from .serializers import *
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from datetime import datetime
@@ -27,7 +27,7 @@ class PrivateFeedView(APIView):
         return Response(serializer_class.data)
     
 class PublicFeedView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [AllowAny]
     def get(self, request):
         interest = request.GET.get('interest', None)
         PublicFeeds = PublicFeed.objects.filter(interest=interest).filter(date = datetime.today().date())
