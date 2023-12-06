@@ -9,5 +9,7 @@ router.register('public', PublicFeedViewSet)
 urlpatterns = [
     path('', include(router.urls)),
     path('private/list', PrivateFeedView.as_view()),
-    path('public/list', PublicFeedView.as_view())
+    path('public/list', PublicFeedView.as_view()),
+    path('private/<int:pk>/like-or-dislike', PrivateFeedLikeView.as_view()),
+    path('public/<int:pk>/like-or-dislike', PublicFeedLikeView.as_view()),
 ]
