@@ -14,7 +14,7 @@ class PrivateFeedViewSet(viewsets.ModelViewSet):
     serializer_class = PrivateFeedSerializer
 
 class PublicFeedViewSet(viewsets.ModelViewSet):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [AllowAny]
     queryset = PublicFeed.objects.all().order_by('-date')
     serializer_class = PublicFeedSerializer
 

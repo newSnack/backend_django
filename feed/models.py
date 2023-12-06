@@ -10,6 +10,7 @@ class PrivateFeed(models.Model):
     comment = models.TextField(help_text="댓글여론요약")
     originalURL = models.CharField(max_length=100, help_text="원본링크")
     date = models.DateField(auto_now_add=True, help_text="발행날짜")
+    imgURL = models.ImageField(blank=True, null=True, verbose_name='image')
     user = models.ForeignKey(User, null=True, blank=True, on_delete=CASCADE, help_text="소유자")
     
 class PublicFeed(models.Model):
@@ -18,4 +19,5 @@ class PublicFeed(models.Model):
     comment = models.TextField(help_text="댓글여론요약")
     originalURL = models.CharField(max_length=100, help_text="원본링크")
     date = models.DateField(auto_now_add=True, help_text="발행날짜")
+    imgURL = models.ImageField(blank=True, null=True, verbose_name='image')
     interest = models.ForeignKey(Interest, null=True, blank=True, on_delete=CASCADE, help_text="관심사")
