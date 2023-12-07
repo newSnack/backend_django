@@ -57,7 +57,7 @@ def send_to_me(request):
         'Content-Type': 'application/x-www-form-urlencoded'
     }
 
-    template_object = {
+    template_object = { # 추후 요약 로직이 완성되면 담아서 보내는 코드로 대체할 예정
         "object_type": "feed",
         "content": {
             "title": "News Update",
