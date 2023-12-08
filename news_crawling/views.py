@@ -1,89 +1,61 @@
 import json
 import re
-from django.shortcuts import render
+from datetime import datetime
+
 from rest_framework import status
 from rest_framework.views import APIView
 from rest_framework.response import Response
+from rest_framework.permissions import IsAuthenticated
+
+from .models import News
 from .serializers import NewsSerializer
 import requests
 import os
 from bs4 import BeautifulSoup, SoupStrainer
 
 
-# def extractNewsContent(url):
-#     try:
-#         response = requests.get(url)
-#         if response.status_code == 200:
-#             return fetch_and_parse_article(response.content)
-#         else:
-#             return Response({'message': 'Failed to fetch the webpage'}, status=status.HTTP_400_BAD_REQUEST)
-#     except Exception as e:
-#         return Response({'message': f'Error while fetching the webpage: {e}'},
-#                         status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+def contents_flat(c_List):
+    flatList = []
+    d_flatList = []
+    for elem in c_List:
+        if type(elem) == list:
+            for e in elem:
+                flatList.append(e)
+        else:
+            flatList.append(elem)
 
-# personal feed 영역
-
-def getPersonalNaverSearch(node, srcText, start, display):
-    client_id = os.environ.get('NAVER_CLIENT_ID')
-    client_secret = os.environ.get('NAVER_CLIENT_SECRET')
-
-    base = "https://openapi.naver.com/v1/search"
-    node = f"/{node}.json"
-    parameters = f"?query={requests.utils.quote(srcText)}&start={start}&display={display}"
-
-    url = base + node + parameters
-    headers = {
-        "X-Naver-Client-Id": client_id,
-        "X-Naver-Client-Secret": client_secret
-    }
-
-    response = requests.get(url, headers=headers)
-    if response.status_code == 200:
-        return response.json()
-    else:
-        print(f"Error: {response.status_code}")
-        return None
-    
-def contents_flat(c_List): 
-    flatList = [] 
-    d_flatList=[]
-    for elem in c_List: 
-        if type(elem) == list: 
-            for e in elem: 
-                flatList.append(e) 
-        else: 
-            flatList.append(elem) 
-           
     return flatList
 
 
 def get_comment(url):
-    page=1    
-    header = { 
-        "User-agent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/65.0.3325.181 Safari/537.36", 
-        "referer":url, 
-         
+    page = 1
+    header = {
+        "User-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/65.0.3325.181 Safari/537.36",
+        "referer": url,
+
     }
-    oid=url.split("/")[-2]
-    aid=url.split("/")[-1] 
-    c_List=[]
-    while True : 
-        c_url="https://apis.naver.com/commentBox/cbox/web_neo_list_jsonp.json?ticket=news&templateId=default_society&pool=cbox5&_callback=jQuery1707138182064460843_1523512042464&lang=ko&country=&objectId=news"+oid+"%2C"+aid+"&categoryId=&pageSize=100&indexSize=10&groupId=&listType=OBJECT&pageType=more&page="+str(page)+"&refresh=false&sort=FAVORITE"  
-        r=requests.get(c_url,headers=header) 
-        cont=BeautifulSoup(r.content,"html.parser")     
-        total_comm=str(cont).split('comment":')[1].split(",")[0] 
-        
-        match=re.findall('"contents":"([^\*]*)","userIdNo"', str(cont))
-        date=re.findall('"modTime":"([^\*]*)","modTimeGmt"', str(cont))             
+    oid = url.split("/")[-2]
+    aid = url.split("/")[-1]
+    c_List = []
+    while True:
+        c_url = "https://apis.naver.com/commentBox/cbox/web_neo_list_jsonp.json?ticket=news&templateId=default_society&pool=cbox5&_callback=jQuery1707138182064460843_1523512042464&lang=ko&country=&objectId=news" + oid + "%2C" + aid + "&categoryId=&pageSize=100&indexSize=10&groupId=&listType=OBJECT&pageType=more&page=" + str(
+            page) + "&refresh=false&sort=FAVORITE"
+        r = requests.get(c_url, headers=header)
+        cont = BeautifulSoup(r.content, "html.parser")
+        total_comm = str(cont).split('comment":')[1].split(",")[0]
+
+        match = re.findall('"contents":"([^\*]*)","userIdNo"', str(cont))
+        date = re.findall('"modTime":"([^\*]*)","modTimeGmt"', str(cont))
         c_List.append(match)
-        
-        if int(total_comm) <= ((page) * 5): 
-            break 
-        else :  
-            page+=1
-            
-    return contents_flat(c_List)   
-    
+
+        if int(total_comm) <= ((page) * 5):
+            break
+        else:
+            page += 1
+
+    return contents_flat(c_List)
+
+
 def additional_article_info(url: str):
     headers = {
         'authority': 'n.news.naver.com',
@@ -121,45 +93,73 @@ def additional_article_info(url: str):
 
     comment = get_comment(url)
     data = {
-            "comment": comment,
-            "img": img,
-            "provider": provider
-        }
+        "comment": comment,
+        "img": img,
+        "provider": provider
+    }
 
     # Converting the dictionary to a JSON string
     json_data = json.dumps(data)
     return json_data
 
 
+def get_personal_naver_search(node, srcText, start, display):
+    client_id = os.environ.get('NAVER_CLIENT_ID')
+    client_secret = os.environ.get('NAVER_CLIENT_SECRET')
+
+    base = "https://openapi.naver.com/v1/search"
+    node = f"/{node}.json"
+    parameters = f"?query={requests.utils.quote(srcText)}&start={start}&display={display}"
+
+    url = base + node + parameters
+    headers = {
+        "X-Naver-Client-Id": client_id,
+        "X-Naver-Client-Secret": client_secret
+    }
+
+    response = requests.get(url, headers=headers)
+    if response.status_code == 200:
+        return response.json()
+    else:
+        print(f"Error: {response.status_code}")
+        return None
+
+
+def store_crawled_personal_article(user):
+    search_queries = user.interest_keywords
+    all_articles = []
+
+    for query in search_queries:
+        jsonResponse = get_personal_naver_search('news', query, 1, 10)
+        if jsonResponse:
+            for post in jsonResponse.get('items', []):
+                additional_info = json.loads(additional_article_info(post['link']))
+                article = {
+                    'user': user,
+                    'title': post['title'],
+                    'description': post['description'],
+                    'org_link': post['originallink'],
+                    'link': post['link'],
+                    'pub_date': datetime.datetime.strptime(post['pubDate'], '%Y-%m-%d %H:%M:%S'),
+                    'content': additional_info['comment'],
+                }
+                all_articles.append(article)
+        else:
+            print(f"Failed to make API request for query: {query}")
+
+    # 최신순으로 정렬 해서 저장
+    sorted_articles = sorted(all_articles, key=lambda x: x['pub_date'], reverse=True)
+    for article in sorted_articles:
+        News.objects.create(**article)
+
+
 class PersonalNewsListView(APIView):
+    permission_classes = [IsAuthenticated]  # Authorization 부분을 읽어 user가 누군지 특정함
 
     def get(self, request):
-        srcTexts = request.query_params.getlist('query')
-
-        if not srcTexts:
-            return Response({"message": "query empty."}, status=status.HTTP_400_BAD_REQUEST)
-
-        jsonResult = []
-        for srcText in srcTexts:
-            jsonResponse = getPersonalNaverSearch('news', srcText, 1, 10)
-            if jsonResponse:
-                for cnt, post in enumerate(jsonResponse.get('items', []), 1):
-                    # content = extractNewsContent(post['link'])
-                    postData = {
-                        'cnt': cnt,
-                        'title': post['title'],
-                        'description': post['description'],
-                        'org_link': post['originallink'],
-                        'link': post['link'],
-                        'pDate': post['pubDate'],
-                        # 'content': content
-                    }
-                    jsonResult.append(postData)
-            else:
-                return Response({"message": f"fail to make API request: {srcText}"},
-                                status=status.HTTP_503_SERVICE_UNAVAILABLE)
-
-        serializer = NewsSerializer(jsonResult, many=True)
+        article_num = 20  # 반환할 최신 뉴스 기사의 수
+        user_news = News.objects.filter(user=request.user)[:article_num]  # 그 특정된 유저에게 할당된 뉴스들만 모음 / 가장 최신 기사 20개만 모음
+        serializer = NewsSerializer(user_news, many=True)
         return Response(serializer.data)
 
 
@@ -195,7 +195,7 @@ def get_all_news_links():
     return all_news_links
 
 
-def fetch_and_parse_article(html_content):
+def crawl_article_for_public(html_content):  # 밑에 store 함수에 넘겨줄 기사 크롤링 담당
     try:
         soup = BeautifulSoup(html_content, 'html.parser')
         article_content_div = soup.find('article', id='dic_area')
@@ -215,19 +215,27 @@ def fetch_and_parse_article(html_content):
                         status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
-class PublicNewsFeedView(APIView):
+def store_crawled_public_article():  # 여러 기사 크롤링해서 News Object로 db에 저장. 비동기로 돌릴 예정
+    news_links = get_all_news_links()
+    for link in news_links:
+        response = requests.get(link)
+        if response.status_code == 200:
+            article_content = crawl_article_for_public(response.content)
+            News.objects.create(
+                title=article_content['title'],
+                description=article_content['description'],
+                org_link=article_content['originallink'],
+                link=link,
+                pub_date=datetime.datetime.now(),
+                content=article_content['content']
+            )
+        else:
+            print(f"Failed to fetch the article at {link}")
 
+
+class PublicNewsFeedView(APIView):  # db에 저장해둔 public 뉴스 피드를 응답으로 보내는 view함수
     def get(self, request):
-        news_links = get_all_news_links()
-        articles_content = []
+        news_data = News.objects.all()
 
-        for link in news_links:
-            response = requests.get(link)
-            if response.status_code == 200:
-                article_content = fetch_and_parse_article(response.content)
-                articles_content.append({'link': link, 'content': article_content})
-            else:
-                return Response({"message": f"Failed to fetch the article at {link}"},
-                                status=status.HTTP_503_SERVICE_UNAVAILABLE)
-
-        return Response(articles_content, status=status.HTTP_200_OK)
+        serializer = NewsSerializer(news_data, many=True)
+        return Response(serializer.data)
