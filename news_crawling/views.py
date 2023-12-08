@@ -147,6 +147,7 @@ def store_crawled_personal_article(user):
     generated_queries = generate_search_queries(user.interest_keywords)
     all_feeds = []
 
+
     for query in generated_queries:
         jsonResponse = get_personal_naver_search('news', query, 1, 10)
         if jsonResponse:
