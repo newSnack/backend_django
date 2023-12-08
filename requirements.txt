@@ -26,3 +26,6 @@ sqlparse==0.4.3
 tzdata==2022.7
 urllib3==1.26.14
 whitenoise==6.3.0
+
+bs4~=0.0.1
+beautifulsoup4~=4.12.2

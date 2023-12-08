@@ -1,9 +1,13 @@
 import json
 import re
+from datetime import datetime
+
 from django.shortcuts import render
 from rest_framework import status
 from rest_framework.views import APIView
 from rest_framework.response import Response
+
+from .models import News
 from .serializers import NewsSerializer
 import requests
 import os
@@ -43,47 +47,50 @@ def getPersonalNaverSearch(node, srcText, start, display):
     else:
         print(f"Error: {response.status_code}")
         return None
-    
-def contents_flat(c_List): 
-    flatList = [] 
-    d_flatList=[]
-    for elem in c_List: 
-        if type(elem) == list: 
-            for e in elem: 
-                flatList.append(e) 
-        else: 
-            flatList.append(elem) 
-           
+
+
+def contents_flat(c_List):
+    flatList = []
+    d_flatList = []
+    for elem in c_List:
+        if type(elem) == list:
+            for e in elem:
+                flatList.append(e)
+        else:
+            flatList.append(elem)
+
     return flatList
 
 
 def get_comment(url):
-    page=1    
-    header = { 
-        "User-agent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/65.0.3325.181 Safari/537.36", 
-        "referer":url, 
-         
+    page = 1
+    header = {
+        "User-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/65.0.3325.181 Safari/537.36",
+        "referer": url,
+
     }
-    oid=url.split("/")[-2]
-    aid=url.split("/")[-1] 
-    c_List=[]
-    while True : 
-        c_url="https://apis.naver.com/commentBox/cbox/web_neo_list_jsonp.json?ticket=news&templateId=default_society&pool=cbox5&_callback=jQuery1707138182064460843_1523512042464&lang=ko&country=&objectId=news"+oid+"%2C"+aid+"&categoryId=&pageSize=100&indexSize=10&groupId=&listType=OBJECT&pageType=more&page="+str(page)+"&refresh=false&sort=FAVORITE"  
-        r=requests.get(c_url,headers=header) 
-        cont=BeautifulSoup(r.content,"html.parser")     
-        total_comm=str(cont).split('comment":')[1].split(",")[0] 
-        
-        match=re.findall('"contents":"([^\*]*)","userIdNo"', str(cont))
-        date=re.findall('"modTime":"([^\*]*)","modTimeGmt"', str(cont))             
+    oid = url.split("/")[-2]
+    aid = url.split("/")[-1]
+    c_List = []
+    while True:
+        c_url = "https://apis.naver.com/commentBox/cbox/web_neo_list_jsonp.json?ticket=news&templateId=default_society&pool=cbox5&_callback=jQuery1707138182064460843_1523512042464&lang=ko&country=&objectId=news" + oid + "%2C" + aid + "&categoryId=&pageSize=100&indexSize=10&groupId=&listType=OBJECT&pageType=more&page=" + str(
+            page) + "&refresh=false&sort=FAVORITE"
+        r = requests.get(c_url, headers=header)
+        cont = BeautifulSoup(r.content, "html.parser")
+        total_comm = str(cont).split('comment":')[1].split(",")[0]
+
+        match = re.findall('"contents":"([^\*]*)","userIdNo"', str(cont))
+        date = re.findall('"modTime":"([^\*]*)","modTimeGmt"', str(cont))
         c_List.append(match)
-        
-        if int(total_comm) <= ((page) * 5): 
-            break 
-        else :  
-            page+=1
-            
-    return contents_flat(c_List)   
-    
+
+        if int(total_comm) <= ((page) * 5):
+            break
+        else:
+            page += 1
+
+    return contents_flat(c_List)
+
+
 def additional_article_info(url: str):
     headers = {
         'authority': 'n.news.naver.com',
@@ -121,10 +128,10 @@ def additional_article_info(url: str):
 
     comment = get_comment(url)
     data = {
-            "comment": comment,
-            "img": img,
-            "provider": provider
-        }
+        "comment": comment,
+        "img": img,
+        "provider": provider
+    }
 
     # Converting the dictionary to a JSON string
     json_data = json.dumps(data)
@@ -195,7 +202,7 @@ def get_all_news_links():
     return all_news_links
 
 
-def fetch_and_parse_article(html_content):
+def crawl_article_for_public(html_content): # 밑에 store 함수에 넘겨줄 기사 크롤링 담당
     try:
         soup = BeautifulSoup(html_content, 'html.parser')
         article_content_div = soup.find('article', id='dic_area')
@@ -215,19 +222,27 @@ def fetch_and_parse_article(html_content):
                         status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
-class PublicNewsFeedView(APIView):
+def store_crawled_public_article(): # 여러 기사 크롤링해서 News Object로 db에 저장. 비동기로 돌릴 예정
+    news_links = get_all_news_links()
+    for link in news_links:
+        response = requests.get(link)
+        if response.status_code == 200:
+            article_content = crawl_article_for_public(response.content)
+            News.objects.create(
+                title=article_content['title'],
+                description=article_content['description'],
+                org_link=article_content['originallink'],
+                link=link,
+                pub_date=datetime.datetime.now(),
+                content=article_content['content']
+            )
+        else:
+            print(f"Failed to fetch the article at {link}")
 
+
+class PublicNewsFeedView(APIView): # db에 저장해둔 public 뉴스 피드를 응답으로 보내는 view함수
     def get(self, request):
-        news_links = get_all_news_links()
-        articles_content = []
+        news_data = News.objects.all()
 
-        for link in news_links:
-            response = requests.get(link)
-            if response.status_code == 200:
-                article_content = fetch_and_parse_article(response.content)
-                articles_content.append({'link': link, 'content': article_content})
-            else:
-                return Response({"message": f"Failed to fetch the article at {link}"},
-                                status=status.HTTP_503_SERVICE_UNAVAILABLE)
-
-        return Response(articles_content, status=status.HTTP_200_OK)
+        serializer = NewsSerializer(news_data, many=True)
+        return Response(serializer.data)
