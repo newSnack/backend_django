@@ -3,15 +3,14 @@ import re
 from datetime import datetime
 
 from rest_framework import status
-from rest_framework.views import APIView
 from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated
 
-from .models import News
-from .serializers import NewsSerializer
+from feed.models import PrivateFeed, PublicFeed
 import requests
 import os
 from bs4 import BeautifulSoup, SoupStrainer
+
+import openai
 
 
 def contents_flat(c_List):
@@ -125,42 +124,52 @@ def get_personal_naver_search(node, srcText, start, display):
         return None
 
 
-def store_crawled_personal_article(user):
-    search_queries = user.interest_keywords
-    all_articles = []
+openai.api_key = os.getenv("OPENAI_API_KEY")
 
-    for query in search_queries:
+
+def generate_search_queries(keywords):
+    prompt = (
+            "다음 키워드들을 연관성이 있는 그룹으로 분류하고, 각 그룹에 대한 효과적인 뉴스 검색 쿼리를 한국어로 생성해라. "
+            "각 검색 쿼리는 개행 문자로 구분해라. 키워드들: " + ", ".join(keywords)
+    )
+
+    response = openai.Completion.create(
+        engine="davinci",
+        prompt=prompt,
+        max_tokens=100,
+        temperature=0.7  # 창의적인 답변을 위한 설정, 필요에 따라 조절 가능
+    )
+
+    return response.choices[0].text.strip().split('\n')
+
+
+def store_crawled_personal_article(user):
+    generated_queries = generate_search_queries(user.interest_keywords)
+    all_feeds = []
+
+    for query in generated_queries:
         jsonResponse = get_personal_naver_search('news', query, 1, 10)
         if jsonResponse:
             for post in jsonResponse.get('items', []):
                 additional_info = json.loads(additional_article_info(post['link']))
-                article = {
+                feed = {
                     'user': user,
                     'title': post['title'],
-                    'description': post['description'],
-                    'org_link': post['originallink'],
-                    'link': post['link'],
-                    'pub_date': datetime.datetime.strptime(post['pubDate'], '%Y-%m-%d %H:%M:%S'),
-                    'content': additional_info['comment'],
+                    'content': post['description'],
+                    'comment': additional_info['comment'],
+                    'originalURL': post['link'],
+                    'date': datetime.datetime.strptime(post['pubDate'], '%Y-%m-%d %H:%M:%S'),
+                    'imgURL': additional_info['img'],
+                    'likeOrDislike': 0,
                 }
-                all_articles.append(article)
+                all_feeds.append(feed)
         else:
             print(f"Failed to make API request for query: {query}")
 
-    # 최신순으로 정렬 해서 저장
-    sorted_articles = sorted(all_articles, key=lambda x: x['pub_date'], reverse=True)
-    for article in sorted_articles:
-        News.objects.create(**article)
-
-
-class PersonalNewsListView(APIView):
-    permission_classes = [IsAuthenticated]  # Authorization 부분을 읽어 user가 누군지 특정함
-
-    def get(self, request):
-        article_num = 20  # 반환할 최신 뉴스 기사의 수
-        user_news = News.objects.filter(user=request.user)[:article_num]  # 그 특정된 유저에게 할당된 뉴스들만 모음 / 가장 최신 기사 20개만 모음
-        serializer = NewsSerializer(user_news, many=True)
-        return Response(serializer.data)
+    # 최신순으로 정렬
+    sorted_feeds = sorted(all_feeds, key=lambda x: x['date'], reverse=True)
+    for feed in sorted_feeds:
+        PrivateFeed.objects.create(**feed)
 
 
 # public feed 영역
@@ -221,21 +230,14 @@ def store_crawled_public_article():  # 여러 기사 크롤링해서 News Object
         response = requests.get(link)
         if response.status_code == 200:
             article_content = crawl_article_for_public(response.content)
-            News.objects.create(
-                title=article_content['title'],
-                description=article_content['description'],
-                org_link=article_content['originallink'],
-                link=link,
-                pub_date=datetime.datetime.now(),
-                content=article_content['content']
+            additional_info = json.loads(additional_article_info(link))
+
+            PublicFeed.objects.create(
+                title=article_content['title'][:30],
+                content=article_content['content'],
+                comment=additional_info['comment'],
+                originalURL=link,
+                imgURL=additional_info['img'],
             )
         else:
             print(f"Failed to fetch the article at {link}")
-
-
-class PublicNewsFeedView(APIView):  # db에 저장해둔 public 뉴스 피드를 응답으로 보내는 view함수
-    def get(self, request):
-        news_data = News.objects.all()
-
-        serializer = NewsSerializer(news_data, many=True)
-        return Response(serializer.data)
