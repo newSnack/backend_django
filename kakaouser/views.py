@@ -11,7 +11,7 @@ import requests
 from user.models import User
 
 BASE_URL = 'http://localhost:8000/'
-KAKAO_CALLBACK_URI = 'http://localhost:8000/api/kuser/kakao/callback/'
+KAKAO_CALLBACK_URI = 'http://localhost:5173/api/kuser/kakao/callback/'
 
 # 인가코드는 프론트에서 받는 걸로 변경하기
 def kakao_login(request):
@@ -26,6 +26,8 @@ def kakao_callback(request, **kwargs):
     token_request = requests.get(
         f"https://kauth.kakao.com/oauth/token?grant_type=authorization_code&client_id={client_id}&redirect_uri={KAKAO_CALLBACK_URI}&code={code}")
     token_response_json = token_request.json()
+
+    print("response=>", token_response_json)
 
     # 에러 발생 시 중단
     error = token_response_json.get("error", None)
@@ -59,6 +61,8 @@ def kakao_callback(request, **kwargs):
         accept = requests.post(f"{BASE_URL}api/kuser/kakao/login/finish/", data=data)
         accept_status = accept.status_code
 
+        print("accept=>",accept)
+
         # 뭔가 중간에 문제가 생기면 에러
         if accept_status != 200:
             return JsonResponse({'err_msg': 'failed to signin'}, status=accept_status)
@@ -72,6 +76,8 @@ def kakao_callback(request, **kwargs):
         data = {'access_token': access_token, 'code': code}
         accept = requests.post(f"{BASE_URL}api/kuser/kakao/login/finish/", data=data)
         accept_status = accept.status_code
+
+        print(accept)
 
         # 뭔가 중간에 문제가 생기면 에러
         if accept_status != 200:
