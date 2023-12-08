@@ -13,6 +13,8 @@ import requests
 import os
 from bs4 import BeautifulSoup, SoupStrainer
 
+import openai
+
 
 def contents_flat(c_List):
     flatList = []
@@ -125,11 +127,30 @@ def get_personal_naver_search(node, srcText, start, display):
         return None
 
 
+openai.api_key = os.getenv("OPENAI_API_KEY")
+
+
+def generate_search_queries(keywords):
+    prompt = (
+            "다음 키워드들을 연관성이 있는 그룹으로 분류하고, 각 그룹에 대한 효과적인 뉴스 검색 쿼리를 한국어로 생성해라. "
+            "각 검색 쿼리는 개행 문자로 구분해라. 키워드들: " + ", ".join(keywords)
+    )
+
+    response = openai.Completion.create(
+        engine="davinci",
+        prompt=prompt,
+        max_tokens=100,
+        temperature=0.7  # 창의적인 답변을 위한 설정, 필요에 따라 조절 가능
+    )
+
+    return response.choices[0].text.strip().split('\n')
+
+
 def store_crawled_personal_article(user):
-    search_queries = user.interest_keywords
+    generated_queries = generate_search_queries(user.interest_keywords)
     all_articles = []
 
-    for query in search_queries:
+    for query in generated_queries:
         jsonResponse = get_personal_naver_search('news', query, 1, 10)
         if jsonResponse:
             for post in jsonResponse.get('items', []):
