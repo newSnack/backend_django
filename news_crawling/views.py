@@ -127,29 +127,38 @@ def get_personal_naver_search(node, srcText, start, display):
 
 def store_crawled_personal_article(user):
     search_queries = user.interest_keywords
+    all_articles = []
+
     for query in search_queries:
         jsonResponse = get_personal_naver_search('news', query, 1, 10)
         if jsonResponse:
             for post in jsonResponse.get('items', []):
                 additional_info = json.loads(additional_article_info(post['link']))
-                News.objects.create(
-                    user=user,
-                    title=post['title'],
-                    description=post['description'],
-                    org_link=post['originallink'],
-                    link=post['link'],
-                    pub_date=datetime.datetime.strptime(post['pubDate'], '%Y-%m-%d %H:%M:%S'),
-                    content=additional_info['comment'],
-                )
+                article = {
+                    'user': user,
+                    'title': post['title'],
+                    'description': post['description'],
+                    'org_link': post['originallink'],
+                    'link': post['link'],
+                    'pub_date': datetime.datetime.strptime(post['pubDate'], '%Y-%m-%d %H:%M:%S'),
+                    'content': additional_info['comment'],
+                }
+                all_articles.append(article)
         else:
             print(f"Failed to make API request for query: {query}")
+
+    # 최신순으로 정렬 해서 저장
+    sorted_articles = sorted(all_articles, key=lambda x: x['pub_date'], reverse=True)
+    for article in sorted_articles:
+        News.objects.create(**article)
 
 
 class PersonalNewsListView(APIView):
     permission_classes = [IsAuthenticated]  # Authorization 부분을 읽어 user가 누군지 특정함
 
     def get(self, request):
-        user_news = News.objects.filter(user=request.user)  # 그 특정된 유저에게 할당된 뉴스들만 모음
+        article_num = 20  # 반환할 최신 뉴스 기사의 수
+        user_news = News.objects.filter(user=request.user)[:article_num]  # 그 특정된 유저에게 할당된 뉴스들만 모음 / 가장 최신 기사 20개만 모음
         serializer = NewsSerializer(user_news, many=True)
         return Response(serializer.data)
 
