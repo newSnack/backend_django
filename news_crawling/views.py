@@ -12,47 +12,84 @@ from bs4 import BeautifulSoup, SoupStrainer
 
 import openai
 
+openai.api_key = os.getenv("OPENAI_API_KEY")
 
-def contents_flat(c_List):
-    flatList = []
-    d_flatList = []
-    for elem in c_List:
-        if type(elem) == list:
-            for e in elem:
-                flatList.append(e)
-        else:
-            flatList.append(elem)
 
-    return flatList
+# def contents_flat(c_List):
+#     flatList = []
+#     d_flatList = []
+#     for elem in c_List:
+#         if type(elem) == list:
+#             for e in elem:
+#                 flatList.append(e)
+#         else:
+#             flatList.append(elem)
+#
+#     return flatList
+#
+#
+# def get_comment(url):
+#     page = 1
+#     header = {
+#         "User-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/65.0.3325.181 Safari/537.36",
+#         "referer": url,
+#     }
+#     oid = url.split("/")[-2]
+#     aid = url.split("/")[-1]
+#     c_List = []
+#     while True:
+#         c_url = "https://apis.naver.com/commentBox/cbox/web_neo_list_jsonp.json?ticket=news&templateId=default_society&pool=cbox5&_callback=jQuery1707138182064460843_1523512042464&lang=ko&country=&objectId=news" + oid + "%2C" + aid + "&categoryId=&pageSize=100&indexSize=10&groupId=&listType=OBJECT&pageType=more&page=" + str(
+#             page) + "&refresh=false&sort=FAVORITE"
+#         r = requests.get(c_url, headers=header)
+#         cont = BeautifulSoup(r.content, "html.parser")
+#         total_comm = str(cont).split('comment":')[1].split(",")[0]
+#
+#         match = re.findall('"contents":"([^\*]*)","userIdNo"', str(cont))
+#         c_List.append(match)
+#
+#         if int(total_comm) <= ((page) * 5):
+#             break
+#         else:
+#             page += 1
+#
+#     return contents_flat(c_List)
+def summarize_comments(comments):
+    comments_combined = " ".join(comments)
+    prompt = f"기사의 댓글들이다 두 세개의 문장으로 요약하고 각 문장을 쉼표로 구분해라: {comments_combined}"
+
+    response = openai.Completion.create(
+        engine="davinci",
+        prompt=prompt,
+        max_tokens=60,
+        temperature=0.5
+    )
+
+    # 요약된 텍스트 반환
+    return response.choices[0].text.strip()
 
 
 def get_comment(url):
-    page = 1
+    page = 1  # 첫 페이지만 조회
     header = {
         "User-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/65.0.3325.181 Safari/537.36",
         "referer": url,
-
     }
     oid = url.split("/")[-2]
     aid = url.split("/")[-1]
-    c_List = []
-    while True:
-        c_url = "https://apis.naver.com/commentBox/cbox/web_neo_list_jsonp.json?ticket=news&templateId=default_society&pool=cbox5&_callback=jQuery1707138182064460843_1523512042464&lang=ko&country=&objectId=news" + oid + "%2C" + aid + "&categoryId=&pageSize=100&indexSize=10&groupId=&listType=OBJECT&pageType=more&page=" + str(
-            page) + "&refresh=false&sort=FAVORITE"
-        r = requests.get(c_url, headers=header)
-        cont = BeautifulSoup(r.content, "html.parser")
-        total_comm = str(cont).split('comment":')[1].split(",")[0]
 
-        match = re.findall('"contents":"([^\*]*)","userIdNo"', str(cont))
-        date = re.findall('"modTime":"([^\*]*)","modTimeGmt"', str(cont))
-        c_List.append(match)
+    # 최대 10개 댓글만 조회
+    c_url = f"https://apis.naver.com/commentBox/cbox/web_neo_list_jsonp.json?ticket=news&templateId=default_society&pool=cbox5&_callback=jQuery1707138182064460843_1523512042464&lang=ko&country=&objectId=news{oid}%2C{aid}&categoryId=&pageSize=10&indexSize=10&groupId=&listType=OBJECT&pageType=more&page={page}&refresh=false&sort=FAVORITE"
+    response = requests.get(c_url, headers=header)
+    content = BeautifulSoup(response.content, "html.parser")
 
-        if int(total_comm) <= ((page) * 5):
-            break
-        else:
-            page += 1
+    total_comm = str(content).split('comment":')[1].split(",")[0]
 
-    return contents_flat(c_List)
+    if int(total_comm) > 0:
+        matches = re.findall('"contents":"([^\*]*)","userIdNo"', str(content))
+        summarized_comments = summarize_comments(matches)
+        return summarized_comments.split(',')  # 쉼표로 분리하여 리스트 반환
+    else:
+        return []  # 댓글이 없는 경우 빈 리스트 반환
 
 
 def additional_article_info(url: str):
@@ -124,9 +161,6 @@ def get_personal_naver_search(node, srcText, start, display):
         return None
 
 
-openai.api_key = os.getenv("OPENAI_API_KEY")
-
-
 def generate_search_queries(keywords):
     prompt = (
             "다음 키워드들을 연관성이 있는 그룹으로 분류하고, 각 그룹에 대한 효과적인 뉴스 검색 쿼리를 한국어로 생성해라. "
@@ -146,7 +180,6 @@ def generate_search_queries(keywords):
 def store_crawled_personal_article(user):
     generated_queries = generate_search_queries(user.interest_keywords)
     all_feeds = []
-
 
     for query in generated_queries:
         jsonResponse = get_personal_naver_search('news', query, 1, 10)
@@ -225,7 +258,7 @@ def crawl_article_for_public(html_content):  # 밑에 store 함수에 넘겨줄 
                         status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
-def store_crawled_public_article():  # 여러 기사 크롤링해서 News Object로 db에 저장. 비동기로 돌릴 예정
+def store_crawled_public_article():  # 여러 기사 크롤링해서 Feed Object로 db에 저장. 비동기로 돌릴 예정
     news_links = get_all_news_links()
     for link in news_links:
         response = requests.get(link)
@@ -233,11 +266,15 @@ def store_crawled_public_article():  # 여러 기사 크롤링해서 News Object
             article_content = crawl_article_for_public(response.content)
             additional_info = json.loads(additional_article_info(link))
 
+            summarized_comments = summarize_comments(additional_info['comment'])
+            summarized_comments_str = ', '.join(summarized_comments)
+
             PublicFeed.objects.create(
                 title=article_content['title'][:30],
                 content=article_content['content'],
-                comment=additional_info['comment'],
+                comment=summarized_comments_str,
                 originalURL=link,
+                # date
                 imgURL=additional_info['img'],
             )
         else:
