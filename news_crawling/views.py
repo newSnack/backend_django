@@ -56,7 +56,7 @@ openai.api_key = os.getenv("OPENAI_API_KEY")
 #     return contents_flat(c_List)
 def summarize_comments(comments):
     comments_combined = " ".join(comments)
-    prompt = f"기사의 댓글들이다 두 세개의 문장으로 요약하고 각 문장을 쉼표로 구분해라: {comments_combined}"
+    prompt = f"다음은 기사의 댓글들이다 두 세개의 문장으로 요약하고 각 문장을 쉼표로 구분해라. 댓글의 어투를 보존해라: {comments_combined}"
 
     response = openai.Completion.create(
         engine="davinci",
@@ -218,15 +218,18 @@ def store_crawled_personal_article(user):
         if jsonResponse:
             for post in jsonResponse.get('items', []):
                 additional_info = additional_article_info(post['link'])
+                summarized_comments = summarize_comments(additional_info['comment'])
+                summarized_comments_str = ', '.join(summarized_comments)
                 feed = {
                     'user': user,
                     'title': post['title'],
                     'content': post['description'],
-                    'comment': additional_info['comment'],
+                    'comment': summarized_comments_str,
                     'originalURL': post['link'],
                     'date': additional_info['date'],
                     'imgURL': additional_info['img'],
                     'likeOrDislike': 0,
+                    'category': additional_info['category']
                 }
                 all_feeds.append(feed)
         else:
