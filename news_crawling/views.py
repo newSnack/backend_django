@@ -13,7 +13,6 @@ from bs4 import BeautifulSoup, SoupStrainer
 import openai
 import re
 
-
 openai.api_key = os.getenv("OPENAI_API_KEY")
 
 
@@ -96,7 +95,7 @@ def get_comment(url):
 
 def convert_string_to_datetime(date_string):
     match = re.match(r'(\d{4}.\d{2}.\d{2}.) (오전|오후) (\d{1,2}:\d{2})', date_string)
-    
+
     if match:
         date_part, am_pm, time_part = match.groups()
 
@@ -297,8 +296,9 @@ def store_crawled_public_article():  # 여러 기사 크롤링해서 Feed Object
                 content=article_content['content'],
                 comment=summarized_comments_str,
                 originalURL=link,
-                # date
+                date=additional_info['date'],
                 imgURL=additional_info['img'],
+                category=additional_info['category'],
             )
         else:
             print(f"Failed to fetch the article at {link}")
