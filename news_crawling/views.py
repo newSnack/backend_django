@@ -227,6 +227,7 @@ def store_crawled_personal_article(user):
                     'date': additional_info['date'],
                     'imgURL': additional_info['img'],
                     'likeOrDislike': 0,
+                    'category': additional_info['category']
                 }
                 all_feeds.append(feed)
         else:
