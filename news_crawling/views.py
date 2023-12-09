@@ -154,7 +154,8 @@ def additional_article_info(url: str):
     data = {
         "comment": comment,
         "img": img,
-        "date": convert_string_to_datetime(date)
+        "date": convert_string_to_datetime(date),
+        "category": int(url.split("/")[-2])
     }
 
     # Converting the dictionary to a JSON string
