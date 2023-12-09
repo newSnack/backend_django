@@ -149,12 +149,22 @@ def additional_article_info(url: str):
     except:
         img = "NO_IMAGE"
 
+    # category
+    pattern = r'section\s*=\s*{([^}]*)}'
+    match = re.search(pattern, document)
+
+    if match:
+        data_dict = json.loads('{' + match.group(1) + '}')
+        category = data_dict["name"]
+    else:
+        category = "NO_CATEGORY"
+
     comment = get_comment(url)
     data = {
         "comment": comment,
         "img": img,
         "date": convert_string_to_datetime(date),
-        "category": int(url.split("/")[-2])
+        "category": category
     }
 
     # Converting the dictionary to a JSON string
