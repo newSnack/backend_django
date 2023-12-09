@@ -11,6 +11,8 @@ import os
 from bs4 import BeautifulSoup, SoupStrainer
 
 import openai
+import re
+
 
 openai.api_key = os.getenv("OPENAI_API_KEY")
 
@@ -92,6 +94,27 @@ def get_comment(url):
         return []  # 댓글이 없는 경우 빈 리스트 반환
 
 
+def convert_string_to_datetime(date_string):
+    match = re.match(r'(\d{4}.\d{2}.\d{2}.) (오전|오후) (\d{1,2}:\d{2})', date_string)
+    
+    if match:
+        date_part, am_pm, time_part = match.groups()
+
+        if am_pm == '오후':
+            # 오후인 경우 12를 더해서 24시간 형식으로 변환
+            time_part = datetime.strptime(time_part, '%I:%M').strftime('%H:%M')
+            hours, minutes = map(int, time_part.split(':'))
+            if hours < 12:
+                hours += 12
+            time_part = f'{hours:02d}:{minutes:02d}'
+
+        datetime_string = f'{date_part} {time_part}'
+        dt_object = datetime.strptime(datetime_string, '%Y.%m.%d. %H:%M')
+        return dt_object
+    else:
+        raise ValueError("올바르지 않은 형식의 문자열입니다.")
+
+
 def additional_article_info(url: str):
     headers = {
         'authority': 'n.news.naver.com',
@@ -114,10 +137,10 @@ def additional_article_info(url: str):
     response = requests.get(url, headers=headers)
     document = response.content.decode("utf-8")
 
-    # Provider
-    provider_strainer = SoupStrainer("a", attrs={"class": "media_end_head_top_logo _LAZY_LOADING_ERROR_HIDE"})
-    provider_DOM = BeautifulSoup(document, "lxml", parse_only=provider_strainer)
-    provider = provider_DOM.find("img")["alt"]
+    # Date
+    date_strainer = SoupStrainer("span", attrs={"class": "media_end_head_info_datestamp_time _ARTICLE_DATE_TIME"})
+    date_DOM = BeautifulSoup(document, "lxml", parse_only=date_strainer)
+    date = date_DOM.get_text(separator="\n").strip()
 
     # img
     try:
@@ -131,12 +154,11 @@ def additional_article_info(url: str):
     data = {
         "comment": comment,
         "img": img,
-        "provider": provider
+        "date": convert_string_to_datetime(date)
     }
 
     # Converting the dictionary to a JSON string
-    json_data = json.dumps(data)
-    return json_data
+    return data
 
 
 def get_personal_naver_search(node, srcText, start, display):
@@ -185,14 +207,14 @@ def store_crawled_personal_article(user):
         jsonResponse = get_personal_naver_search('news', query, 1, 10)
         if jsonResponse:
             for post in jsonResponse.get('items', []):
-                additional_info = json.loads(additional_article_info(post['link']))
+                additional_info = additional_article_info(post['link'])
                 feed = {
                     'user': user,
                     'title': post['title'],
                     'content': post['description'],
                     'comment': additional_info['comment'],
                     'originalURL': post['link'],
-                    'date': datetime.datetime.strptime(post['pubDate'], '%Y-%m-%d %H:%M:%S'),
+                    'date': additional_info['date'],
                     'imgURL': additional_info['img'],
                     'likeOrDislike': 0,
                 }
@@ -264,7 +286,7 @@ def store_crawled_public_article():  # 여러 기사 크롤링해서 Feed Object
         response = requests.get(link)
         if response.status_code == 200:
             article_content = crawl_article_for_public(response.content)
-            additional_info = json.loads(additional_article_info(link))
+            additional_info = additional_article_info(link)
 
             summarized_comments = summarize_comments(additional_info['comment'])
             summarized_comments_str = ', '.join(summarized_comments)
