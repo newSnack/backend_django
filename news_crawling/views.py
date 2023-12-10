@@ -58,29 +58,33 @@ openai.api_key = os.getenv("OPENAI_API_KEY")
 
 def summarize_comments(comments):
     comments_combined = " ".join(comments)
-    prompt = f"다음은 기사의 댓글들이다 두 세개의 문장으로 요약하고 각 문장을 쉼표로 구분해라. 댓글의 어투를 보존해라: {comments_combined}"
+    messages = [
+        {"role": "system", "content": "댓글을 요약할 수 있는 도우다."},
+        {"role": "user", "content": f"이 댓글들을 두 세 문장으로 요약해라 단, 어투를 그대로 유지해라: {comments_combined}"}
+    ]
 
-    response = openai.Completion.create(
-        engine="gpt-3.5-turbo-1106",
-        prompt=prompt,
-        max_tokens=60,
-        temperature=0.5
+    response = openai.ChatCompletion.create(
+        model="gpt-3.5-turbo",
+        messages=messages,
+        max_tokens=60
     )
 
-    # 요약된 텍스트 반환
-    return response.choices[0].text.strip()
+    return response["choices"][0]["message"]["content"].strip()
 
 
 def summarize_article(article):
-    prompt = f"다음은 기사의 본문이다 핵심만 세네개의 문장으로 요약해라: {article}"
+    messages = [
+        {"role": "system", "content": "기사를 요약할 수 있는 도우미다."},
+        {"role": "user", "content": f"이 기사를 핵심만 세네 문장으로 요약해라: {article}"}
+    ]
 
-    response = openai.Completion.create(
-        engine="gpt-3.5-turbo-1106",
-        prompt=prompt,
-        max_tokens=200,
+    response = openai.ChatCompletion.create(
+        model="gpt-3.5-turbo",
+        messages=messages,
+        max_tokens=200
     )
 
-    return response.choices[0].text.strip()
+    return response["choices"][0]["message"]["content"].strip()
 
 
 def get_comment(url):
@@ -276,7 +280,7 @@ def get_all_news_links():
                 soup = BeautifulSoup(response.content, 'html.parser')
                 news_ul = soup.find('ul', class_='type06_headline')
                 if news_ul:
-                    list_items = news_ul.find_all('li', limit=5)
+                    list_items = news_ul.find_all('li', limit=1)
                     for item in list_items:
                         link = item.find('a')
                         if link and link.has_attr('href'):
@@ -320,12 +324,19 @@ def crawl_article_for_public(html_content):
         return {'title': 'Error', 'content': f'Error while fetching news content: {e}'}
 
 
+import logging
+
+logging.basicConfig(level=logging.INFO)
+
+
 def store_crawled_public_article(request):
     try:
+        logging.info("Crawling started.")
         news_links = get_all_news_links()
         for link in news_links:
             response = requests.get(link)
             if response.status_code == 200:
+                logging.info(f"Fetching article from {link}")
                 article_content = crawl_article_for_public(response.content)
                 additional_info = additional_article_info(link)
 
@@ -344,8 +355,10 @@ def store_crawled_public_article(request):
                     category=additional_info['category'],
                 )
             else:
+                logging.error(f"Failed to fetch the article at {link}")
                 print(f"Failed to fetch the article at {link}")
 
         return HttpResponse("Crawling and data processing completed successfully.")
     except Exception as e:
+        logging.error(f"An error occurred: {e}")
         return HttpResponse(f"An error occurred: {e}", status=500)
