@@ -10,6 +10,7 @@ urlpatterns = [
     path("initialize/", UserInitializeView.as_view()),
     path("liked-feeds/private", UserLikedPrivateFeedsView.as_view()),
     path("liked-feeds/public", UserLikedPublicFeedsView.as_view()),
+    path("interest/add/", UserInterestView.as_view()),
     path('dj-rest-auth/', include('dj_rest_auth.urls')),
     path('dj-rest-auth/registration/', include('dj_rest_auth.registration.urls')),
     path('dj-rest-auth/checkid/<str:id>/', IDCheckView.as_view())
