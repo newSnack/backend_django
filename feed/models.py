@@ -8,7 +8,7 @@ from interest.models import *
 class PrivateFeed(models.Model):
     title = models.CharField(max_length=30, help_text="피드제목")
     content = models.TextField(help_text="본문(원문요약)")
-    comment = models.TextField(help_text="댓글여론요약")
+    comment = models.TextField(help_text="댓글여론요약", null=True)
     originalURL = models.CharField(max_length=100, help_text="원본링크")
     date = models.DateField(auto_now_add=True, help_text="발행날짜")
     imgURL = models.ImageField(blank=True, null=True, verbose_name='image')
@@ -20,7 +20,7 @@ class PrivateFeed(models.Model):
 class PublicFeed(models.Model):
     title = models.CharField(max_length=30, help_text="피드제목")
     content = models.TextField(help_text="본문(원문요약)")
-    comment = models.TextField(help_text="댓글여론요약")
+    comment = models.TextField(help_text="댓글여론요약", null=True)
     originalURL = models.CharField(max_length=100, help_text="원본링크")
     date = models.DateField(auto_now_add=True, help_text="발행날짜")
     imgURL = models.ImageField(blank=True, null=True, verbose_name='image')
