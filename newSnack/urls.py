@@ -26,6 +26,7 @@ urlpatterns = [
     path('api/kuser/', include("kakaouser.urls")),
     path('api/feed/', include("feed.urls")),
     path('api/interest/', include("interest.urls")),
+    path('api/news-crawling/', include("news_crawling.urls")),
 ]
 
 urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
