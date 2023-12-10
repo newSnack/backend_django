@@ -156,12 +156,12 @@ def additional_article_info(url: str):
     date = date_DOM.get_text(separator="\n").strip()
 
     # img
-    try:
-        img_strainer = SoupStrainer("div", attrs={"class": "media_end_photo_photo"})
-        img_DOM = BeautifulSoup(document, "lxml", parse_only=img_strainer)
-        img = img_DOM.find("img")["src"]
-    except:
-        img = "NO_IMAGE"
+    img_soup = BeautifulSoup(document, 'lxml').find_all('img')
+    img = 'NO_IMAGE'
+    for img in img_soup:
+        if img.get('id'):
+            img = img.get('data-src')
+            break
 
     # category
     pattern = r'section\s*=\s*{([^}]*)}'
