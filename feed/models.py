@@ -25,6 +25,6 @@ class PublicFeed(models.Model):
     date = models.DateField(auto_now_add=True, help_text="발행날짜")
     imgURL = models.ImageField(blank=True, null=True, verbose_name='image')
     # interest = models.ForeignKey(Interest, null=True, blank=True, on_delete=CASCADE, help_text="관심사")
-    category = models.CharField(max_length=50, help_text="기사 카테고리")
+    category = models.CharField(max_length=50, default='정치', help_text="기사 카테고리")
     liked_user = models.ManyToManyField(User, related_name='like', blank=True)
     disliked_user = models.ManyToManyField(User, related_name='dislike', blank=True)
