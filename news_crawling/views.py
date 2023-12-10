@@ -2,8 +2,9 @@ import json
 import re
 from datetime import datetime
 
+from django.contrib.auth import get_user_model
 from django.http import HttpResponse
-from rest_framework import status
+from rest_framework import status, request
 from rest_framework.response import Response
 
 from feed.models import PrivateFeed, PublicFeed
@@ -89,26 +90,27 @@ def summarize_article(article):
 
 def get_comment(url):
     page = 1  # 첫 페이지만 조회
-    header = {
+    headers = {
         "User-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/65.0.3325.181 Safari/537.36",
         "referer": url,
     }
     oid = url.split("/")[-2]
     aid = url.split("/")[-1]
 
-    # 최대 10개 댓글만 조회
     c_url = f"https://apis.naver.com/commentBox/cbox/web_neo_list_jsonp.json?ticket=news&templateId=default_society&pool=cbox5&_callback=jQuery1707138182064460843_1523512042464&lang=ko&country=&objectId=news{oid}%2C{aid}&categoryId=&pageSize=10&indexSize=10&groupId=&listType=OBJECT&pageType=more&page={page}&refresh=false&sort=FAVORITE"
-    response = requests.get(c_url, headers=header)
+    response = requests.get(c_url, headers=headers)
     content = BeautifulSoup(response.content, "html.parser")
 
-    total_comm = str(content).split('comment":')[1].split(",")[0]
-
-    if int(total_comm) > 0:
-        matches = re.findall('"contents":"([^\*]*)","userIdNo"', str(content))
-        summarized_comments = summarize_comments(matches)
-        return summarized_comments.split(',')  # 쉼표로 분리하여 리스트 반환
+    if 'comment":' in str(content):
+        total_comm = str(content).split('comment":')[1].split(",")[0]
+        if int(total_comm) > 0:
+            matches = re.findall('"contents":"([^\*]*)","userIdNo"', str(content))
+            summarized_comments = summarize_comments(matches)
+            return summarized_comments.split(',')
+        else:
+            return []
     else:
-        return []  # 댓글이 없는 경우 빈 리스트 반환
+        return []
 
 
 def convert_string_to_datetime(date_string):
@@ -152,12 +154,18 @@ def additional_article_info(url: str):
     }
 
     response = requests.get(url, headers=headers)
-    document = response.content.decode("utf-8")
+    try:
+        document = response.content.decode("utf-8")
+    except UnicodeDecodeError:
+        try:
+            document = response.content.decode("euc-kr")
+        except UnicodeDecodeError:
+            return {"error": "Decoding failed"}
 
     # Date
-    date_strainer = SoupStrainer("span", attrs={"class": "media_end_head_info_datestamp_time _ARTICLE_DATE_TIME"})
-    date_DOM = BeautifulSoup(document, "lxml", parse_only=date_strainer)
-    date = date_DOM.get_text(separator="\n").strip()
+    # date_strainer = SoupStrainer("span", attrs={"class": "media_end_head_info_datestamp_time _ARTICLE_DATE_TIME"})
+    # date_DOM = BeautifulSoup(document, "lxml", parse_only=date_strainer)
+    # date = date_DOM.get_text(separator="\n").strip()
 
     # img
     img_soup = BeautifulSoup(document, 'lxml').find_all('img')
@@ -173,7 +181,7 @@ def additional_article_info(url: str):
 
     if match:
         data_dict = json.loads('{' + match.group(1) + '}')
-        category = data_dict["name"]
+        category = data_dict.get("name", "NO_CATEGORY")
     else:
         category = "NO_CATEGORY"
 
@@ -181,7 +189,7 @@ def additional_article_info(url: str):
     data = {
         "comment": comment,
         "img": img,
-        "date": convert_string_to_datetime(date),
+        "date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "category": category
     }
 
@@ -212,51 +220,74 @@ def get_personal_naver_search(node, srcText, start, display):
 
 
 def generate_search_queries(keywords):
-    prompt = (
-            "다음 키워드들을 연관성이 있는 그룹으로 분류하고, 각 그룹에 대한 효과적인 뉴스 검색 쿼리를 한국어로 생성해라. "
-            "각 검색 쿼리는 개행 문자로 구분해라. 키워드들: " + ", ".join(keywords)
+    prompt = "다음은 유저가 검색한 기사 제목들이다. 이들에 기반해 유저가 추후 관심있어할 뉴스기사에 포함될 단어들을 몇개 나열하고 쉼표로 구분하라. 답변은 반드시 순수 한글 단어나 구만 반드시 쉼표로 구분해서 나열하고 절대 다른 쓸데없는 말은 포함하지마라" + \
+             "기사제목들: " + ", ".join(keywords)
+
+    messages = [
+        {"role": "system", "content": "유저가 검색한 기사 제목들에 기반해 관심있어할만한 뉴스 기사에 포함될 단어들을 유추하는 도우미."},
+        {"role": "user", "content": prompt}
+    ]
+
+    response = openai.ChatCompletion.create(
+        model="gpt-3.5-turbo",
+        messages=messages,
+        max_tokens=100
     )
 
-    response = openai.Completion.create(
-        engine="davinci",
-        prompt=prompt,
-        max_tokens=100,
-        temperature=0.7  # 창의적인 답변을 위한 설정, 필요에 따라 조절 가능
-    )
-
-    return response.choices[0].text.strip().split('\n')
+    return response["choices"][0]["message"]["content"].strip().split(',')
 
 
-def store_crawled_personal_article(user):
+User = get_user_model()
+
+import logging
+
+logging.basicConfig(level=logging.INFO)
+
+
+def store_crawled_personal_article(request):
+    username = request.GET.get('username')
+
+    try:
+        user = User.objects.get(username=username)
+    except User.DoesNotExist:
+        return HttpResponse("User not found", status=404)
+    except Exception as e:
+        return HttpResponse(f"An error occurred: {e}", status=500)
+
     generated_queries = generate_search_queries(user.interest_keywords)
-    all_feeds = []
+
+    logging.info(f"Generated queries: {generated_queries}")
 
     for query in generated_queries:
-        jsonResponse = get_personal_naver_search('news', query, 1, 10)
+        jsonResponse = get_personal_naver_search('news', query, 1, 1)
         if jsonResponse:
             for post in jsonResponse.get('items', []):
                 additional_info = additional_article_info(post['link'])
+                if "error" in additional_info:
+                    logging.error(f"Error fetching article info: {additional_info['error']}")
+                    continue
+                logging.info(f"Fetching article {post['title']}")
                 summarized_comments = summarize_comments(additional_info['comment'])
                 summarized_comments_str = ', '.join(summarized_comments)
-                feed = {
+                img = additional_info.get('img', 'NO_IMAGE')
+
+                feed_data = {
                     'user': user,
                     'title': post['title'],
                     'content': post['description'],
                     'comment': summarized_comments_str,
                     'originalURL': post['link'],
+                    'imgURL': img,
                     'date': additional_info['date'],
-                    'imgURL': additional_info['img'],
                     'likeOrDislike': 0,
                     'category': additional_info['category']
                 }
-                all_feeds.append(feed)
-        else:
-            print(f"Failed to make API request for query: {query}")
 
-    # 최신순으로 정렬
-    sorted_feeds = sorted(all_feeds, key=lambda x: x['date'], reverse=True)
-    for feed in sorted_feeds:
-        PrivateFeed.objects.create(**feed)
+                PrivateFeed.objects.create(**feed_data)
+        else:
+            logging.error(f"Failed to make API request for query: {query}")
+
+    return HttpResponse("Crawling and data processing completed successfully.")
 
 
 # public feed 영역
