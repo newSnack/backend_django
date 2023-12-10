@@ -39,7 +39,8 @@ class PublicFeedView(APIView):
         category_query = request.GET.get('category', None)
 
         if category_query:
-            public_feeds = PublicFeed.objects.filter(category__icontains=category_query)
+            public_feeds = PublicFeed.objects.filter(category__icontains=category_query).filter(
+                date=datetime.today().date())
         else:
             public_feeds = PublicFeed.objects.all()
 
