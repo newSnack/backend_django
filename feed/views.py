@@ -44,7 +44,8 @@ class PublicFeedView(APIView):
         else:
             public_feeds = PublicFeed.objects.all()
 
-        serializer = PublicFeedSerializer(public_feeds, many=True)
+        serializer_context = {'request': request, }
+        serializer = PublicFeedSerializer(public_feeds, many=True, context=serializer_context)
         return Response(serializer.data)
 
 
