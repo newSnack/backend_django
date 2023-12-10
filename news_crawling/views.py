@@ -2,6 +2,7 @@ import json
 import re
 from datetime import datetime
 
+from django.http import HttpResponse
 from rest_framework import status
 from rest_framework.response import Response
 
@@ -54,18 +55,31 @@ openai.api_key = os.getenv("OPENAI_API_KEY")
 #             page += 1
 #
 #     return contents_flat(c_List)
+
 def summarize_comments(comments):
     comments_combined = " ".join(comments)
     prompt = f"다음은 기사의 댓글들이다 두 세개의 문장으로 요약하고 각 문장을 쉼표로 구분해라. 댓글의 어투를 보존해라: {comments_combined}"
 
     response = openai.Completion.create(
-        engine="davinci",
+        engine="gpt-3.5-turbo-1106",
         prompt=prompt,
         max_tokens=60,
         temperature=0.5
     )
 
     # 요약된 텍스트 반환
+    return response.choices[0].text.strip()
+
+
+def summarize_article(article):
+    prompt = f"다음은 기사의 본문이다 핵심만 세네개의 문장으로 요약해라: {article}"
+
+    response = openai.Completion.create(
+        engine="gpt-3.5-turbo-1106",
+        prompt=prompt,
+        max_tokens=200,
+    )
+
     return response.choices[0].text.strip()
 
 
@@ -273,45 +287,68 @@ def get_all_news_links():
     return all_news_links
 
 
-def crawl_article_for_public(html_content):  # 밑에 store 함수에 넘겨줄 기사 크롤링 담당
+def crawl_article_for_public(html_content):
     try:
         soup = BeautifulSoup(html_content, 'html.parser')
-        article_content_div = soup.find('article', id='dic_area')
 
-        image_description = article_content_div.find('div', class_='end_photo_org')
-        if image_description:
-            image_description.extract()
-
-        media_summary = article_content_div.find('strong', class_='media_end_summary')
-        if media_summary:
-            media_summary.extract()
-
-        news_content = article_content_div.get_text(strip=True) if article_content_div else 'No content available'
-        return news_content
-    except Exception as e:
-        return Response({'message': f'Error while fetching news content: {e}'},
-                        status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-
-def store_crawled_public_article():  # 여러 기사 크롤링해서 Feed Object로 db에 저장. 비동기로 돌릴 예정
-    news_links = get_all_news_links()
-    for link in news_links:
-        response = requests.get(link)
-        if response.status_code == 200:
-            article_content = crawl_article_for_public(response.content)
-            additional_info = additional_article_info(link)
-
-            summarized_comments = summarize_comments(additional_info['comment'])
-            summarized_comments_str = ', '.join(summarized_comments)
-
-            PublicFeed.objects.create(
-                title=article_content['title'][:30],
-                content=article_content['content'],
-                comment=summarized_comments_str,
-                originalURL=link,
-                date=additional_info['date'],
-                imgURL=additional_info['img'],
-                category=additional_info['category'],
-            )
+        # 제목 추출
+        title_area = soup.find('h2', id='title_area')
+        if title_area and title_area.span:
+            title = title_area.span.get_text(strip=True)
         else:
-            print(f"Failed to fetch the article at {link}")
+            title = 'No title available'
+
+        # 기사 내용 추출
+        article_content_div = soup.find('article', id='dic_area')
+        if article_content_div:
+            image_description = article_content_div.find('div', class_='end_photo_org')
+            if image_description:
+                image_description.extract()
+
+            media_summary = article_content_div.find('strong', class_='media_end_summary')
+            if media_summary:
+                media_summary.extract()
+
+            news_content = article_content_div.get_text(strip=True)
+
+
+        else:
+            news_content = 'No content available'
+
+        return {
+            'title': title,
+            'content': news_content
+        }
+    except Exception as e:
+        return {'title': 'Error', 'content': f'Error while fetching news content: {e}'}
+
+
+def store_crawled_public_article(request):
+    try:
+        news_links = get_all_news_links()
+        for link in news_links:
+            response = requests.get(link)
+            if response.status_code == 200:
+                article_content = crawl_article_for_public(response.content)
+                additional_info = additional_article_info(link)
+
+                # summarized_comments = summarize_comments(additional_info['comment'])
+                # summarized_comments_str = ', '.join(summarized_comments)
+
+                summarized_article_str = summarize_article(article_content['content'])
+
+                PublicFeed.objects.create(
+                    title=article_content['title'][:30],
+                    content=summarized_article_str,
+                    # comment=summarized_comments_str,
+                    originalURL=link,
+                    date=additional_info['date'],
+                    imgURL=additional_info['img'],
+                    category=additional_info['category'],
+                )
+            else:
+                print(f"Failed to fetch the article at {link}")
+
+        return HttpResponse("Crawling and data processing completed successfully.")
+    except Exception as e:
+        return HttpResponse(f"An error occurred: {e}", status=500)
