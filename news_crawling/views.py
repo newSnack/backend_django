@@ -276,14 +276,11 @@ def get_all_news_links():
                 soup = BeautifulSoup(response.content, 'html.parser')
                 news_ul = soup.find('ul', class_='type06_headline')
                 if news_ul:
-                    link = news_ul.find('li').find('a')
-                    if link and link.has_attr('href'):
-                        all_news_links.append(link['href'])
-                    # list_items = news_ul.find_all('li')[:2]
-                    # for item in list_items:
-                    #     link = item.find('a')
-                    #     if link and link.has_attr('href'):
-                    #         all_news_links.append(link['href'])
+                    list_items = news_ul.find_all('li', limit=5)
+                    for item in list_items:
+                        link = item.find('a')
+                        if link and link.has_attr('href'):
+                            all_news_links.append(link['href'])
     return all_news_links
 
 
