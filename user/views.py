@@ -23,7 +23,7 @@ class UserInitializeView(APIView):
     def post(self, request):
         nickname = request.data["nickname"]
         birthYear = request.data["birthYear"]
-        interest = request.data["interest"]
+        # interest = request.data["interest"]
         kakaoIsLinked = request.data["kakaoIsLinked"]
         emailIsLinked = request.data["emailIsLinked"]
         kakaoAddress = request.data["kakaoAddress"]
@@ -43,6 +43,16 @@ class UserInitializeView(APIView):
         user.save()
 
         return Response({"detail": "User initialized successfully."}, status=status.HTTP_200_OK)
+    
+class UserInterestView(APIView):
+    permission_classes = [IsAuthenticated]
+    def post(self, request):
+        user = User.objects.get(pk=request.user.pk)
+        interest = request.data["interest"]
+        user.interest_keywords = interest
+        user.save()
+        return Response({"detail": "User Interest Add successfully."}, status=status.HTTP_200_OK)
+
 
 class UserLikedPrivateFeedsView(APIView):
     permission_classes = [IsAuthenticated]
