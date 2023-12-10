@@ -3,57 +3,115 @@ import re
 from datetime import datetime
 
 from rest_framework import status
-from rest_framework.views import APIView
 from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated
 
-from .models import News
-from .serializers import NewsSerializer
+from feed.models import PrivateFeed, PublicFeed
 import requests
 import os
 from bs4 import BeautifulSoup, SoupStrainer
 
+import openai
+import re
 
-def contents_flat(c_List):
-    flatList = []
-    d_flatList = []
-    for elem in c_List:
-        if type(elem) == list:
-            for e in elem:
-                flatList.append(e)
-        else:
-            flatList.append(elem)
+openai.api_key = os.getenv("OPENAI_API_KEY")
 
-    return flatList
+
+# def contents_flat(c_List):
+#     flatList = []
+#     d_flatList = []
+#     for elem in c_List:
+#         if type(elem) == list:
+#             for e in elem:
+#                 flatList.append(e)
+#         else:
+#             flatList.append(elem)
+#
+#     return flatList
+#
+#
+# def get_comment(url):
+#     page = 1
+#     header = {
+#         "User-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/65.0.3325.181 Safari/537.36",
+#         "referer": url,
+#     }
+#     oid = url.split("/")[-2]
+#     aid = url.split("/")[-1]
+#     c_List = []
+#     while True:
+#         c_url = "https://apis.naver.com/commentBox/cbox/web_neo_list_jsonp.json?ticket=news&templateId=default_society&pool=cbox5&_callback=jQuery1707138182064460843_1523512042464&lang=ko&country=&objectId=news" + oid + "%2C" + aid + "&categoryId=&pageSize=100&indexSize=10&groupId=&listType=OBJECT&pageType=more&page=" + str(
+#             page) + "&refresh=false&sort=FAVORITE"
+#         r = requests.get(c_url, headers=header)
+#         cont = BeautifulSoup(r.content, "html.parser")
+#         total_comm = str(cont).split('comment":')[1].split(",")[0]
+#
+#         match = re.findall('"contents":"([^\*]*)","userIdNo"', str(cont))
+#         c_List.append(match)
+#
+#         if int(total_comm) <= ((page) * 5):
+#             break
+#         else:
+#             page += 1
+#
+#     return contents_flat(c_List)
+def summarize_comments(comments):
+    comments_combined = " ".join(comments)
+    prompt = f"다음은 기사의 댓글들이다 두 세개의 문장으로 요약하고 각 문장을 쉼표로 구분해라. 댓글의 어투를 보존해라: {comments_combined}"
+
+    response = openai.Completion.create(
+        engine="davinci",
+        prompt=prompt,
+        max_tokens=60,
+        temperature=0.5
+    )
+
+    # 요약된 텍스트 반환
+    return response.choices[0].text.strip()
 
 
 def get_comment(url):
-    page = 1
+    page = 1  # 첫 페이지만 조회
     header = {
         "User-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/65.0.3325.181 Safari/537.36",
         "referer": url,
-
     }
     oid = url.split("/")[-2]
     aid = url.split("/")[-1]
-    c_List = []
-    while True:
-        c_url = "https://apis.naver.com/commentBox/cbox/web_neo_list_jsonp.json?ticket=news&templateId=default_society&pool=cbox5&_callback=jQuery1707138182064460843_1523512042464&lang=ko&country=&objectId=news" + oid + "%2C" + aid + "&categoryId=&pageSize=100&indexSize=10&groupId=&listType=OBJECT&pageType=more&page=" + str(
-            page) + "&refresh=false&sort=FAVORITE"
-        r = requests.get(c_url, headers=header)
-        cont = BeautifulSoup(r.content, "html.parser")
-        total_comm = str(cont).split('comment":')[1].split(",")[0]
 
-        match = re.findall('"contents":"([^\*]*)","userIdNo"', str(cont))
-        date = re.findall('"modTime":"([^\*]*)","modTimeGmt"', str(cont))
-        c_List.append(match)
+    # 최대 10개 댓글만 조회
+    c_url = f"https://apis.naver.com/commentBox/cbox/web_neo_list_jsonp.json?ticket=news&templateId=default_society&pool=cbox5&_callback=jQuery1707138182064460843_1523512042464&lang=ko&country=&objectId=news{oid}%2C{aid}&categoryId=&pageSize=10&indexSize=10&groupId=&listType=OBJECT&pageType=more&page={page}&refresh=false&sort=FAVORITE"
+    response = requests.get(c_url, headers=header)
+    content = BeautifulSoup(response.content, "html.parser")
 
-        if int(total_comm) <= ((page) * 5):
-            break
-        else:
-            page += 1
+    total_comm = str(content).split('comment":')[1].split(",")[0]
 
-    return contents_flat(c_List)
+    if int(total_comm) > 0:
+        matches = re.findall('"contents":"([^\*]*)","userIdNo"', str(content))
+        summarized_comments = summarize_comments(matches)
+        return summarized_comments.split(',')  # 쉼표로 분리하여 리스트 반환
+    else:
+        return []  # 댓글이 없는 경우 빈 리스트 반환
+
+
+def convert_string_to_datetime(date_string):
+    match = re.match(r'(\d{4}.\d{2}.\d{2}.) (오전|오후) (\d{1,2}:\d{2})', date_string)
+
+    if match:
+        date_part, am_pm, time_part = match.groups()
+
+        if am_pm == '오후':
+            # 오후인 경우 12를 더해서 24시간 형식으로 변환
+            time_part = datetime.strptime(time_part, '%I:%M').strftime('%H:%M')
+            hours, minutes = map(int, time_part.split(':'))
+            if hours < 12:
+                hours += 12
+            time_part = f'{hours:02d}:{minutes:02d}'
+
+        datetime_string = f'{date_part} {time_part}'
+        dt_object = datetime.strptime(datetime_string, '%Y.%m.%d. %H:%M')
+        return dt_object
+    else:
+        raise ValueError("올바르지 않은 형식의 문자열입니다.")
 
 
 def additional_article_info(url: str):
@@ -78,10 +136,10 @@ def additional_article_info(url: str):
     response = requests.get(url, headers=headers)
     document = response.content.decode("utf-8")
 
-    # Provider
-    provider_strainer = SoupStrainer("a", attrs={"class": "media_end_head_top_logo _LAZY_LOADING_ERROR_HIDE"})
-    provider_DOM = BeautifulSoup(document, "lxml", parse_only=provider_strainer)
-    provider = provider_DOM.find("img")["alt"]
+    # Date
+    date_strainer = SoupStrainer("span", attrs={"class": "media_end_head_info_datestamp_time _ARTICLE_DATE_TIME"})
+    date_DOM = BeautifulSoup(document, "lxml", parse_only=date_strainer)
+    date = date_DOM.get_text(separator="\n").strip()
 
     # img
     try:
@@ -91,16 +149,26 @@ def additional_article_info(url: str):
     except:
         img = "NO_IMAGE"
 
+    # category
+    pattern = r'section\s*=\s*{([^}]*)}'
+    match = re.search(pattern, document)
+
+    if match:
+        data_dict = json.loads('{' + match.group(1) + '}')
+        category = data_dict["name"]
+    else:
+        category = "NO_CATEGORY"
+
     comment = get_comment(url)
     data = {
         "comment": comment,
         "img": img,
-        "provider": provider
+        "date": convert_string_to_datetime(date),
+        "category": category
     }
 
     # Converting the dictionary to a JSON string
-    json_data = json.dumps(data)
-    return json_data
+    return data
 
 
 def get_personal_naver_search(node, srcText, start, display):
@@ -125,42 +193,52 @@ def get_personal_naver_search(node, srcText, start, display):
         return None
 
 
-def store_crawled_personal_article(user):
-    search_queries = user.interest_keywords
-    all_articles = []
+def generate_search_queries(keywords):
+    prompt = (
+            "다음 키워드들을 연관성이 있는 그룹으로 분류하고, 각 그룹에 대한 효과적인 뉴스 검색 쿼리를 한국어로 생성해라. "
+            "각 검색 쿼리는 개행 문자로 구분해라. 키워드들: " + ", ".join(keywords)
+    )
 
-    for query in search_queries:
+    response = openai.Completion.create(
+        engine="davinci",
+        prompt=prompt,
+        max_tokens=100,
+        temperature=0.7  # 창의적인 답변을 위한 설정, 필요에 따라 조절 가능
+    )
+
+    return response.choices[0].text.strip().split('\n')
+
+
+def store_crawled_personal_article(user):
+    generated_queries = generate_search_queries(user.interest_keywords)
+    all_feeds = []
+
+    for query in generated_queries:
         jsonResponse = get_personal_naver_search('news', query, 1, 10)
         if jsonResponse:
             for post in jsonResponse.get('items', []):
-                additional_info = json.loads(additional_article_info(post['link']))
-                article = {
+                additional_info = additional_article_info(post['link'])
+                summarized_comments = summarize_comments(additional_info['comment'])
+                summarized_comments_str = ', '.join(summarized_comments)
+                feed = {
                     'user': user,
                     'title': post['title'],
-                    'description': post['description'],
-                    'org_link': post['originallink'],
-                    'link': post['link'],
-                    'pub_date': datetime.datetime.strptime(post['pubDate'], '%Y-%m-%d %H:%M:%S'),
-                    'content': additional_info['comment'],
+                    'content': post['description'],
+                    'comment': summarized_comments_str,
+                    'originalURL': post['link'],
+                    'date': additional_info['date'],
+                    'imgURL': additional_info['img'],
+                    'likeOrDislike': 0,
+                    'category': additional_info['category']
                 }
-                all_articles.append(article)
+                all_feeds.append(feed)
         else:
             print(f"Failed to make API request for query: {query}")
 
-    # 최신순으로 정렬 해서 저장
-    sorted_articles = sorted(all_articles, key=lambda x: x['pub_date'], reverse=True)
-    for article in sorted_articles:
-        News.objects.create(**article)
-
-
-class PersonalNewsListView(APIView):
-    permission_classes = [IsAuthenticated]  # Authorization 부분을 읽어 user가 누군지 특정함
-
-    def get(self, request):
-        article_num = 20  # 반환할 최신 뉴스 기사의 수
-        user_news = News.objects.filter(user=request.user)[:article_num]  # 그 특정된 유저에게 할당된 뉴스들만 모음 / 가장 최신 기사 20개만 모음
-        serializer = NewsSerializer(user_news, many=True)
-        return Response(serializer.data)
+    # 최신순으로 정렬
+    sorted_feeds = sorted(all_feeds, key=lambda x: x['date'], reverse=True)
+    for feed in sorted_feeds:
+        PrivateFeed.objects.create(**feed)
 
 
 # public feed 영역
@@ -215,27 +293,25 @@ def crawl_article_for_public(html_content):  # 밑에 store 함수에 넘겨줄 
                         status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
-def store_crawled_public_article():  # 여러 기사 크롤링해서 News Object로 db에 저장. 비동기로 돌릴 예정
+def store_crawled_public_article():  # 여러 기사 크롤링해서 Feed Object로 db에 저장. 비동기로 돌릴 예정
     news_links = get_all_news_links()
     for link in news_links:
         response = requests.get(link)
         if response.status_code == 200:
             article_content = crawl_article_for_public(response.content)
-            News.objects.create(
-                title=article_content['title'],
-                description=article_content['description'],
-                org_link=article_content['originallink'],
-                link=link,
-                pub_date=datetime.datetime.now(),
-                content=article_content['content']
+            additional_info = additional_article_info(link)
+
+            summarized_comments = summarize_comments(additional_info['comment'])
+            summarized_comments_str = ', '.join(summarized_comments)
+
+            PublicFeed.objects.create(
+                title=article_content['title'][:30],
+                content=article_content['content'],
+                comment=summarized_comments_str,
+                originalURL=link,
+                date=additional_info['date'],
+                imgURL=additional_info['img'],
+                category=additional_info['category'],
             )
         else:
             print(f"Failed to fetch the article at {link}")
-
-
-class PublicNewsFeedView(APIView):  # db에 저장해둔 public 뉴스 피드를 응답으로 보내는 view함수
-    def get(self, request):
-        news_data = News.objects.all()
-
-        serializer = NewsSerializer(news_data, many=True)
-        return Response(serializer.data)
