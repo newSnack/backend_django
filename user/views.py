@@ -23,7 +23,7 @@ class UserInitializeView(APIView):
     def post(self, request):
         nickname = request.data["nickname"]
         birthYear = request.data["birthYear"]
-        interest = request.data["interest"]
+        # interest = request.data["interest"]
         kakaoIsLinked = request.data["kakaoIsLinked"]
         emailIsLinked = request.data["emailIsLinked"]
         kakaoAddress = request.data["kakaoAddress"]
