@@ -80,7 +80,6 @@ def summarize_article(article):
         max_tokens=200,
     )
 
-    # 요약된 텍스트 반환
     return response.choices[0].text.strip()
 
 
@@ -333,11 +332,10 @@ def store_crawled_public_article(request):
                 article_content = crawl_article_for_public(response.content)
                 additional_info = additional_article_info(link)
 
-                summarized_comments = summarize_comments(additional_info['comment'])
-                summarized_comments_str = ', '.join(summarized_comments)
+                # summarized_comments = summarize_comments(additional_info['comment'])
+                # summarized_comments_str = ', '.join(summarized_comments)
 
-                summarized_article = summarize_article(article_content['content'])
-                summarized_article_str = ', '.join(summarized_article)
+                summarized_article_str = summarize_article(article_content['content'])
 
                 PublicFeed.objects.create(
                     title=article_content['title'][:30],
